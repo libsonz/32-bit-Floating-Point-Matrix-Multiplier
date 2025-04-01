@@ -16,10 +16,10 @@ In this illustraion, we are gonna take two 4x4 matrices as example.
 Each PE in the systolic array computes each element of the final result matrix.
 
 ### How does it work?
-For each Pij/cycle:
-&ensp; Pij = accumualtion of product of Aij x Bji
-&ensp; Aij is transfered to the next right P, Pij+1 (j < 4, i > 0)
-&ensp; Bji is transfered to the next below P, Pi+1j (i < 4, j > 0)
+For each Pij/cycle:<br>
+&ensp; Pij = accumualtion of product of Aij x Bji<br>
+&ensp; Aij is transfered to the next right P, Pij+1 (j < 4, i > 0)<br>
+&ensp; Bji is transfered to the next below P, Pi+1j (i < 4, j > 0)<br>
 
 Those 0 values are added to synchronise the clock cycle for inputs because each PE computes one partial of final result element per one cycle. Therefor, on the first cycle, a14 and b41 are inserted to calculate, the two 0 values of second row and second column are inserted too to reserve(wait for a14 and b41 coming on the next cycle). On the second cycle, a24 and b42 are inserted to calculate, the two 0 values of third row and column are inserted too to reserve(wait for a24 and b42 coming on the next cycle), a14 is transfered to P12 and b41 is transfered to P21. The same manner for next following cycles.
 
