@@ -1,12 +1,12 @@
 module mem_read_m0 // read Matrix M0 from BRAM ( Pipeline N stage)
 #
 (
-    parameter   N = 3, // s? stage 
+    parameter   N = 3, // 3 stage 
     parameter   M = 6 // matrix M*M
 )
 (
     input                                   clk,
-    input   [$clog2(M/N)-1:0]               row, // so bit de danh dia chi
+    input   [$clog2(M/N)-1:0]               row,
     input   [$clog2(M)-1:0]                 column,
     input                                   rd_en,
 
@@ -15,7 +15,7 @@ module mem_read_m0 // read Matrix M0 from BRAM ( Pipeline N stage)
 );
 
 wire    [31:0]  address;
-assign address = (row*M) + column ; // ??i ma tr?n 2 chi?u sang 1 chi?u
+assign address = (row*M) + column ; // transfer matrix 2d to 1d
 
 assign rd_addr_bram_0  = address; // stage 0
 assign rd_en_bram_0    = rd_en;  
@@ -42,6 +42,7 @@ end
     end
 endgenerate */
 
+//assign output
 assign rd_addr_bram_0 = rd_addr_bram_reg[N-1];
 assign rd_en_bram_0   = rd_en_bram_reg[N-1];
 
