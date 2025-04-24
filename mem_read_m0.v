@@ -1,51 +1,51 @@
-module mem_read_m0 // read Matrix M0 from BRAM ( Pipeline N stage)
-#
+module mem_read_m0 # //read matrix m0
 (
-    parameter   N = 3, // 3 stage 
-    parameter   M = 6 // matrix M*M
+    parameter D_W = 8, //data width
+    parameter N   = 3, // N banks
+    parameter M   = 6 // Matrix M*M
 )
 (
-    input                                   clk,
-    input   [$clog2(M/N)-1:0]               row,
-    input   [$clog2(M)-1:0]                 column,
-    input                                   rd_en,
+    input clk,
+    input [$clog2(M/N)-1:0] row,
+    input [$clog2(M)-1:0]   column,
+    input                   rd_en,
 
-    output  wire    [$clog2((M*M)/N)-1:0]   rd_addr_bram_0,
-    output  wire    rd_en_bram_0
+    output reg [$clog2((M*M)/N)-1:0] rd_addr_bram0,
+    output reg [$clog2((M*M)/N)-1:0] rd_addr_bram1,
+    output reg [$clog2((M*M)/N)-1:0] rd_addr_bram2,
+    output reg                  rd_en_bram0,
+    output reg                  rd_en_bram1,
+    output reg                  rd_en_bram2
 );
 
-wire    [31:0]  address;
-assign address = (row*M) + column ; // transfer matrix 2d to 1d
+    wire [$clog2(M*M)-1:0] address;
+    assign address = row * M + column;
 
-assign rd_addr_bram_0  = address; // stage 0
-assign rd_en_bram_0    = rd_en;  
+    // Internal pipeline registers
+    reg [$clog2((M*M)/N)-1:0] rd_addr_pipe [0:N-1];
+    reg                       rd_en_pipe [0:N-1];
 
-// Declaration of arrays inside the module
-reg     [$clog2((M*M)/N)-1:0]      rd_addr_bram_reg [N-1:0];
-reg     [N-1:0]     rd_en_bram_reg;
+    integer i;
+    always @(posedge clk) begin
+        // Stage 0
+        rd_addr_pipe[0] <= address[$clog2((M*M)/N)-1:0];
+        rd_en_pipe[0]   <= rd_en;
 
+        // Pipeline propagation
+        for (i = 1; i < N; i = i + 1) begin
+            rd_addr_pipe[i] <= rd_addr_pipe[i-1];
+            rd_en_pipe[i]   <= rd_en_pipe[i-1];
+        end
 
-// stage 1 and 2
-integer x;
-always @(posedge clk) begin
-    for (x = 1; x < N; x = x + 1) begin
-        rd_addr_bram_reg[x] <= rd_addr_bram_reg[x-1]; 
-        rd_en_bram_reg[x] <= rd_en_bram_reg[x-1];
+        // Assign the final pipeline values to outputs
+        rd_addr_bram0 <= rd_addr_pipe[0];
+        rd_addr_bram1 <= rd_addr_pipe[1];
+        rd_addr_bram2 <= rd_addr_pipe[2];
+
+        rd_en_bram0   <= rd_en_pipe[0];
+        rd_en_bram1   <= rd_en_pipe[1];
+        rd_en_bram2   <= rd_en_pipe[2];
     end
-end
-
-/*generate
-    genvar i;
-    for (i = 1; i < N; i = i + 1) begin: addr_gen
-        assign rd_addr_bram_0 = rd_addr_bram_reg[i];
-        assign rd_en_bram_0 = rd_en_bram_reg[i];
-    end
-endgenerate */
-
-//assign output
-assign rd_addr_bram_0 = rd_addr_bram_reg[N-1];
-assign rd_en_bram_0   = rd_en_bram_reg[N-1];
 
 endmodule
-
 
