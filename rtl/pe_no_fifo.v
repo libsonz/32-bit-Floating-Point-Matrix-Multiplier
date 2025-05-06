@@ -97,7 +97,7 @@ module pe_no_fifo
    // Stage 3: Accumulation
    always @(posedge clk, negedge clr_n)
      begin
-        if (!clr_n)
+        if (!clr_n || start)
           begin
              acc_reg <= 0;
              stage3_valid_reg <= 0;
@@ -110,14 +110,15 @@ module pe_no_fifo
                begin
                   // If 'start' is high (and this is the first valid product), initialize accumulator
                   // Otherwise, add the current product to the accumulator
-                  if (start)
-                    begin
-                       acc_reg <= mul_reg; // Initialize with the first product
-                    end
-                  else
-                    begin
-                       acc_reg <= acc_reg + mul_reg; // Accumulate
-                    end
+                  //if (start)
+                    //begin
+                      // acc_reg <= mul_reg; // Initialize with the 0
+                    //end
+                  //else
+                    //begin
+                       //acc_reg <= acc_reg + mul_reg; // Accumulate
+                    //end
+                  acc_reg <= acc_reg + mul_reg;
                   stage3_valid_reg <= 1; // Stage 3 is valid if stage 2 was valid
                   last_reg3 <= last_reg2; // Propagate pipelined 'last'
                end

@@ -177,9 +177,7 @@ module pe_no_fifo_tb;
             $display("Testcase %d", i);
             execute();
             verify();
-            #10;
-            apply_reset();
-            #10;
+	    #10;
             $display("------------------------------------------------");
          end
 
