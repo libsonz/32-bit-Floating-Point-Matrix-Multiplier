@@ -24,8 +24,18 @@ Partial product of every elements in output matrix C is produced per clock cycle
     <figcaption>Figure: Multiplier Array Architecture</figcaption>
 </figure>
 L: number of columns of matrix A. 
-M: number of rows of matrix B. 
+<br>
+M: number of rows of matrix B.
+<br>
+<br>
+
 No interconnections between the PEs.
+<br>
+This PE array allows one word read from input matrices to be manipulated by one row or one column of PE array.
+<br>
+For instance, one word read from RAM A1 and B1 is manipulated by whole row 1 and column 1 of PE array.
+<br>
+The sequence is that the input data (one word per clock cycle) is optimally reused before another memory read.
 
 ## PE Architecture 
 
@@ -35,9 +45,64 @@ No interconnections between the PEs.
     <figcaption>Figure: PE Architecture</figcaption>
 </figure>
 
-## Top module Architecture and Symbol
+However, in our design, there is no output FIFO, instead output is just registered and feed back into the adder.
+<br>
+Inputs from matrix A and B, each contains one word per clock cycle.
 
-## Multiplication Algorithm
+## Memory Structure
+Two input matrices are partitioned into n banks in BRAM:
+- matrix A is row-partitioned, each bank contains one row.
+- matrix B is column-partitioned, each bank contains one column.
+<br>
+Address Mapping of input matrices:
+- matrix A (M x K): A\[i]\[k] is in \[i % n_banks] and at address (i / n_banks) x K + k  
+- matrix B (K x N): B\[k]\[j] is in \[j / n_banks] and at address k x (N / n_banks) + j/n_banks 
+<br>
+The output matrix is not partitioned to make the address mapping easier for the small matrix. It should be partitioned when two input matrices are scaled to larger size.
+
+### Matrix Partition Example 
+**Matrix A** $$ \begin{bmatrix} A_{00} & A_{01} & A_{02} \\ A_{10} & A_{11} & A_{12} \\ A_{20} & A_{21} & A_{22} \end{bmatrix} $$
+**Matrix B** $$ \begin{bmatrix} B_{00} & B_{01} & B_{02} \\ B_{10} & B_{11} & B_{12} \\ B_{20} & B_{21} & B_{22} \end{bmatrix} $$
+**Matrix A (Row-wise partitioning into 3 banks)**
+
+- **A_BRAM\[0]** stores row 0 (`0 % 3 = 0`).
+- **A_BRAM\[1]** stores row 1 (`1 % 3 = 1`).
+- **A_BRAM\[2]** stores row 2 (`2 % 3 = 2`).
+
+Calculating address for A\[i]\[k] at A_BRAM\[i % 3] with address (i / n_banks) x K + k  :
+
+- A0k​: i=0, Bank 0. Address = (0/3) * 3 + k = 0 * 3 + k = k. (A00​ at address 0, A01​ at 1, A02​ at 2)
+- A1k​: i=1, Bank 1. Address = (1/3) * 3 + k = 0 * 3 + k = k. (A10​ at address 0, A11​ at 1, A12​ at 2)
+- A2k​: i=2, Bank 2. Address = (2/3) * 3 + k = 0 * 3 + k = k. (A20​ at address 0, A21​ at 1, A22​ at 2)
+
+**Visualization of A_BRAM contents:**
+- A_BRAM\[0]: \[A00, A01, A02]
+  Addresses:  0    1    2
+- A_BRAM\[1]: \[A10, A11, A12] 
+  Addresses:  0    1    2
+- A_BRAM\[2]: \[A20, A21, A22] 
+  Addresses:  0    1    2
+
+**Matrix B (Column-wise partitioning into 3 banks)**
+
+- **B_BRAM\[0]** stores column 0 (`0 % 3 = 0`).
+- **B_BRAM\[1]** stores column 1 (`1 % 3 = 1`).
+- **B_BRAM\[2]** stores column 2 (`2 % 3 = 2`).
+
+Calculating address for B\[k]\[j] at B_BRAM\[j % 3] with address k x (N / n_banks) + j/n_banks  :
+
+- Bk0​: j=0, Bank 0. Address = k + 0/3 = k. (B00​ at address 0, B10​ at 1, B20​ at 2)
+- Bk1​: j=1, Bank 1. Address = k + 1/3 = k. (B01​ at address 0, B11​ at 1, B21​ at 2)
+- Bk2​: j=2, Bank 2. Address = k + 2/3 = k. (B02​ at address 0, B12​ at 1, B22​ at 2)
+
+**Visualization of B_BRAM contents:**
+- B_BRAM\[0]: \[B00, B10, B20] 
+  Addresses:  0     1    2
+- B_BRAM\[1]: \[B01, B11, B21] 
+  Addresses:  0     1    2
+- B_BRAM\[2]: \[B02, B12, B22]
+	Addresses:  0     1    2
+## Carry-save Multiplication Algorithm
 <figure>
     <img src="/images/carry-save-multiplier-example.png"
          alt="Systolic-array block diagram">
@@ -94,7 +159,7 @@ Multiplier Adder:
     <figcaption>Figure: 1-bit Multiplier Cell</figcaption>
 </figure>
 
-### Floating-point Multiplier Architecture
+## Floating-point Multiplier Architecture
 <figure>
     <img src="/images/floating-point-multiplier.png"
          alt="Floating-point Multiplier Hardware Architecture">
