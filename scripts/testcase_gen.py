@@ -55,9 +55,9 @@ def main():
     
     # Generate test cases
     print(f"Generating {num_test_cases} test cases...")
-    for i in range(1, num_test_cases + 1):
+    for i in range(0, num_test_cases):
         generate_test_case(i, matrix_size, matrix_size, matrix_size)
-        print(f"Generated test case {i:03d}", end='\r')
+        print(f"Generated test case {i:0d}", end='\r')
     
     print("\nDone! Test cases generated in 'testcases/' directory")
     print("Each test case contains:")
