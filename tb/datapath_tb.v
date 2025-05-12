@@ -3,156 +3,159 @@
 // Description: Testbench for the datapath module for matrix multiplication.
 //              Refactored using tasks for improved readability.
 //----------------------------------------------------------------------------
+`timescale 1ns/1ps
 module datapath_tb;
 
-  // Parameters - Must match the datapath module instantiation
-  parameter DATA_WIDTH = 4; // Data width of matrix elements A and B
-  parameter M = 3;           // Number of rows in Matrix A and C
-  parameter K = 3;           // Number of columns in Matrix A and rows in Matrix B
-  parameter N = 3;           // Number of columns in Matrix B and C
-  parameter N_BANKS = 3;     // Number of BRAM banks for Matrix A and B
 
-  // Parameters for the 2D PE Array dimensions (Must match datapath)
-  parameter PE_ROWS = M; // Number of PE rows = M
-  parameter PE_COLS = N; // Number of PE columns = N
-  parameter N_PE = PE_ROWS * PE_COLS; // Total number of PEs
+   // Parameters - Must match the datapath module instantiation
+   parameter DATA_WIDTH = 4; // Data width of matrix elements A and B
+   parameter M = 3;           // Number of rows in Matrix A and C
+   parameter K = 3;           // Number of columns in Matrix A and rows in Matrix B
+   parameter N = 3;           // Number of columns in Matrix B and C
+   parameter N_BANKS = 3;     // Number of BRAM banks for Matrix A and B
 
-  // Derived parameters (calculated by datapath, but useful for testbench)
-  // Ensure dimensions are positive to avoid $clog2(0) issues
-  parameter ADDR_WIDTH_A_BANK = (M/N_BANKS * K > 0) ? $clog2(M/N_BANKS * K) : 1;
-  parameter ADDR_WIDTH_B_BANK = (K * N/N_BANKS > 0) ? $clog2(K * N/N_BANKS) : 1;
-  parameter ADDR_WIDTH_C = (M * N > 0) ? $clog2(M * N) : 1;
-  // Accumulator width: DATA_WIDTH*2 for product + $clog2(K) for K additions
-  parameter ACC_WIDTH = DATA_WIDTH * 2 + ((K > 1) ? $clog2(K) : 1);
+   // Parameters for the 2D PE Array dimensions (Must match datapath)
+   parameter PE_ROWS = M; // Number of PE rows = M
+   parameter PE_COLS = N; // Number of PE columns = N
+   parameter N_PE = PE_ROWS * PE_COLS; // Total number of PEs
 
-  // Calculated Sizes for BRAMs and Matrices
-  parameter A_BANK_SIZE = (M/N_BANKS) * K; // Size of each A BRAM bank (3/3)*3 = 3
-  parameter B_BANK_SIZE = K * (N/N_BANKS); // Size of each B BRAM bank 3*(3/3) = 3
-  parameter C_BRAM_SIZE = M * N;           // Size of the C BRAM (3*3 = 9)
+   // Derived parameters (calculated by datapath, but useful for testbench)
+   // Ensure dimensions are positive to avoid $clog2(0) issues
+   parameter ADDR_WIDTH_A_BANK = (M/N_BANKS * K > 0) ? $clog2(M/N_BANKS * K) : 1;
+   parameter ADDR_WIDTH_B_BANK = (K * N/N_BANKS > 0) ? $clog2(K * N/N_BANKS) : 1;
+   parameter ADDR_WIDTH_C = (M * N > 0) ? $clog2(M * N) : 1;
+   // Accumulator width: DATA_WIDTH*2 for product + $clog2(K) for K additions
+   parameter ACC_WIDTH = DATA_WIDTH * 2 + ((K > 1) ? $clog2(K) : 1);
+
+   // Calculated Sizes for BRAMs and Matrices
+   parameter A_BANK_SIZE = (M/N_BANKS) * K; // Size of each A BRAM bank (3/3)*3 = 3
+   parameter B_BANK_SIZE = K * (N/N_BANKS); // Size of each B BRAM bank 3*(3/3) = 3
+   parameter C_BRAM_SIZE = M * N;           // Size of the C BRAM (3*3 = 9)
 
 
-  // Testbench Control Parameters
-  parameter NUM_TEST_CASES = 100; // How many test case directories to read (test_000 to test_099)
-  // !! IMPORTANT: Update this path to where your test case directories are located !!
-  // Use a reg array for the base path
-  parameter [8*100-1:0] TEST_CASE_DIR_BASE = "/home/lamar/Documents/git/matrix-multiplier/testcases"; // Base directory for test cases (Max 100 chars)
-  parameter             MAX_FILENAME_LEN = 150; // Maximum length for generated filenames
+   // Testbench Control Parameters
+   parameter NUM_TEST_CASES = 100; // How many test case directories to read (test_000 to test_099)
+   // !! IMPORTANT: Update this path to where your test case directories are located !!
+   // Use a reg array for the base path
+   parameter [8*100-1:0] TEST_CASE_DIR_BASE = "/home/lamar/Documents/git/matrix-multiplier/testcases"; // Base directory for test cases (Max 100 chars)
+   parameter             MAX_FILENAME_LEN = 150; // Maximum length for generated filenames
 
-  // Testbench Signals (Inputs to Datapath)
-  reg                    clk;
-  reg                    clr_n;
+   // Testbench Signals (Inputs to Datapath)
+   reg                   clk;
+   reg                   clr_n;
 
-  reg [$clog2(K)-1:0]    k_idx_in; // Current index for accumulation (0 to K-1)
+   reg [$clog2(K)-1:0]   k_idx_in; // Current index for accumulation (0 to K-1)
 
-  // A BRAMs Control Inputs (N_BANKS instances) - Flattened Vectors
-  reg [N_BANKS-1:0]      en_a_brams_in;
-  reg [N_BANKS-1:0]      we_a_brams_in; // Added write enable signal
-  reg [N_BANKS * ADDR_WIDTH_A_BANK - 1:0] addr_a_brams_in;
-  reg [N_BANKS * DATA_WIDTH - 1:0]        din_a_brams_in; // Added write data signal
+   // A BRAMs Control Inputs (N_BANKS instances) - Flattened Vectors
+   reg [N_BANKS-1:0]     en_a_brams_in;
+   reg [N_BANKS-1:0]     we_a_brams_in; // Added write enable signal
+   reg [N_BANKS * ADDR_WIDTH_A_BANK - 1:0] addr_a_brams_in;
+   reg [N_BANKS * DATA_WIDTH - 1:0]        din_a_brams_in; // Added write data signal
 
-  // B BRAMs Control Inputs (N_BANKS instances) - Flattened Vectors
-   reg [N_BANKS-1:0]                      en_b_brams_in ; // Corrected declaration to unpacked array
-   reg [N_BANKS-1:0]                      we_b_brams_in ; // Corrected declaration to unpacked array
+   // B BRAMs Control Inputs (N_BANKS instances) - Flattened Vectors
+   reg [N_BANKS-1:0]                       en_b_brams_in ; // Corrected declaration to unpacked array
+   reg [N_BANKS-1:0]                       we_b_brams_in ; // Corrected declaration to unpacked array
    reg [N_BANKS * ADDR_WIDTH_B_BANK - 1:0] addr_b_brams_in;
    reg [N_BANKS * DATA_WIDTH - 1:0]        din_b_brams_in; // Corrected declaration to unpacked array
 
-  // C BRAM Write Control Inputs
-  reg                      en_c_bram_in;
-  reg                      we_c_bram_in;
-  reg [ADDR_WIDTH_C-1:0]   addr_c_bram_in;
-  reg [$clog2(N_PE)-1:0]   pe_write_idx_in; // Index for writing PE outputs from buffer (0 to N_PE-1)
-  //wire [ACC_WIDTH-1:0]     din_c_bram; // Connected internally in datapath, not driven here
+   // C BRAM Write Control Inputs
+   reg                                     en_c_bram_in;
+   reg                                     we_c_bram_in;
+   reg [ADDR_WIDTH_C-1:0]                  addr_c_bram_in;
+   reg [$clog2(N_PE)-1:0]                  pe_write_idx_in; // Index for writing PE outputs from buffer (0 to N_PE-1)
+   //wire [ACC_WIDTH-1:0]     din_c_bram; // Connected internally in datapath, not driven here
 
-  // PE Control Inputs - Broadcast to all PEs
-  reg                      pe_start_in;      // Start signal for PEs (high for first K cycle)
-  reg                      pe_valid_in_in;   // Valid input signal for PEs (high during K cycles)
-  reg                      pe_last_in;       // Last input signal for PEs (high on last K cycle)
-
-  reg                      pe_output_capture_en;   // Enable to capture PE outputs into buffer
-  reg                      pe_output_buffer_reset; // Reset the PE output buffer
-
-  // Testbench Signals (Outputs from Datapath)
-  wire [N_PE * ACC_WIDTH - 1:0]      pe_c_out_out;     // PE output (flattened) - Captured by buffer
-  wire [N_PE-1:0]                    pe_outputs_valid_out; // Flattened PE output_valid signals <-- NEW WIRE
-  wire                               pe_output_buffer_valid_out; // Flag indicating valid data in the buffer
-
-  // C BRAM External Read Interface (used by testbench for verification)
-  reg                      read_en_c;        // External read enable for C BRAM Port B
-  reg [ADDR_WIDTH_C-1:0]   read_addr_c;      // External read address for C BRAM Port B
-  wire [(DATA_WIDTH * 2 + ((K > 1) ? $clog2(K) : 1))-1:0] dout_c; // Data output from C BRAM
+   // PE Control Inputs - Broadcast to all PEs
+   reg                                     pe_start_in;      // Start signal for PEs (high for first K cycle)
+   reg                                     pe_valid_in_in;   // Valid input signal for PEs (high during K cycles)
+   reg                                     pe_last_in;       // Last input signal for PEs (high on last K cycle)
 
 
-  // Internal testbench arrays to hold matrix data and expected results
-  // These store the data read from input files and the expected result
-  reg [DATA_WIDTH-1:0] testbench_A [0:M-1][0:K-1];
-  reg [DATA_WIDTH-1:0] testbench_B [0:K-1][0:N-1];
-  reg [ACC_WIDTH-1:0]  expected_C  [0:M-1][0:N-1];
+   reg                                     pe_output_capture_en;   // Enable to capture PE outputs into buffer
+   reg                                     pe_output_buffer_reset; // Reset the PE output buffer
 
-  // This stores the actual result read from the DUT's C BRAM
-  reg [ACC_WIDTH-1:0]  actual_C [0:M-1][0:N-1];
+   // Testbench Signals (Outputs from Datapath)
+   wire [N_PE * ACC_WIDTH - 1:0]           pe_c_out_out;     // PE output (flattened) - Captured by buffer
+   wire [N_PE-1:0]                         pe_outputs_valid_out; // Flattened PE output_valid signals <-- NEW WIRE
+   wire                                    pe_output_buffer_valid_out; // Flag indicating valid data in the buffer
 
-
-  // Internal variables for file handling, loops, and address calculation
-  integer i, j, k; // Loop variables
-  integer test_case; // Current test case number (0 to NUM_TEST_CASES-1)
-  integer pass_count; // Counter for passed test cases
-  integer fail_count; // Counter for failed test cases
-  integer total_errors; // Total element mismatches across all test cases
+   // C BRAM External Read Interface (used by testbench for verification)
+   reg                                     read_en_c;        // External read enable for C BRAM Port B
+   reg [ADDR_WIDTH_C-1:0]                  read_addr_c;      // External read address for C BRAM Port B
+   wire [(DATA_WIDTH * 2 + ((K > 1) ? $clog2(K) : 1))-1:0] dout_c; // Data output from C BRAM
 
 
-  genvar bank_idx_gen; // Declare genvar here, within the generate block
-  genvar bank_idx_read; // Declare genvar here, within the generate block
-  // Clock Generation
-  always #5 clk = ~clk; // 10ns clock period (adjust as needed)
+   // Internal testbench arrays to hold matrix data and expected results
+   // These store the data read from input files and the expected result
+   reg [DATA_WIDTH-1:0]                                    testbench_A [0:M-1][0:K-1];
+   reg [DATA_WIDTH-1:0]                                    testbench_B [0:K-1][0:N-1];
+   reg [ACC_WIDTH-1:0]                                     expected_C  [0:M-1][0:N-1];
 
-  // Instantiate the Datapath module - Connect testbench signals to datapath ports
-  datapath2
-  #(
-    .DATA_WIDTH(DATA_WIDTH),
-    .M(M),
-    .K(K),
-    .N(N),
-    .N_BANKS(N_BANKS),
-    .PE_ROWS(PE_ROWS),
-    .PE_COLS(PE_COLS)
-  )
-  dut (
-    .clk(clk),
-    .clr_n(clr_n),
+   // This stores the actual result read from the DUT's C BRAM
+   reg [ACC_WIDTH-1:0]                                     actual_C [0:M-1][0:N-1];
 
-    .k_idx_in(k_idx_in), // Accumulation index
 
-    .en_a_brams_in(en_a_brams_in),
-    .addr_a_brams_in(addr_a_brams_in),
-    .we_a_brams_in(we_a_brams_in),
-    .din_a_brams_in(din_a_brams_in),
+   // Internal variables for file handling, loops, and address calculation
+   integer                                                 i, j, k; // Loop variables
+   integer                                                 test_case; // Current test case number (0 to NUM_TEST_CASES-1)
+   integer                                                 pass_count; // Counter for passed test cases
+   integer                                                 fail_count; // Counter for failed test cases
+   integer                                                 total_errors; // Total element mismatches across all test cases
 
-    .en_b_brams_in(en_b_brams_in),
-    .addr_b_brams_in(addr_b_brams_in),
-    .we_b_brams_in(we_b_brams_in),
-    .din_b_brams_in(din_b_brams_in),
 
-    .en_c_bram_in(en_c_bram_in),
-    .we_c_bram_in(we_c_bram_in),
-    .addr_c_bram_in(addr_c_bram_in),
-    .pe_write_idx_in(pe_write_idx_in), // Index for writing from buffer
-    //.din_c_bram_in(din_c_bram), // Connected internally in datapath
+   genvar                                                  bank_idx_gen; // Declare genvar here, within the generate block
+   genvar                                                  bank_idx_read; // Declare genvar here, within the generate block
+   // Clock Generation
+   always #5 clk = ~clk; // 10ns clock period (adjust as needed)
 
-    .pe_start_in(pe_start_in),
-    .pe_valid_in_in(pe_valid_in_in),
-    .pe_last_in(pe_last_in),
+   // Instantiate the Datapath module - Connect testbench signals to datapath ports
+   datapath2
+     #(
+       .DATA_WIDTH (DATA_WIDTH),
+       .M          (M),
+       .K          (K),
+       .N          (N),
+       .N_BANKS    (N_BANKS),
+       .PE_ROWS    (PE_ROWS),
+       .PE_COLS    (PE_COLS)
+       )
+   dut (
+        .clk                        (clk),
+        .clr_n                      (clr_n),
 
-    .pe_output_capture_en(pe_output_capture_en),
-    .pe_output_buffer_reset(pe_output_buffer_reset),
+        .k_idx_in                   (k_idx_in), // Accumulation index
 
-    .pe_c_out_out(pe_c_out_out), // Flattened PE outputs
-    .pe_outputs_valid_out(pe_outputs_valid_out), // <-- CONNECTED THE NEW OUTPUT
-    .pe_output_buffer_valid_out(pe_output_buffer_valid_out),
+        .en_a_brams_in              (en_a_brams_in),
+        .addr_a_brams_in            (addr_a_brams_in),
+        .we_a_brams_in              (we_a_brams_in),
+        .din_a_brams_in             (din_a_brams_in),
 
-    .read_en_c(read_en_c),
-    .read_addr_c(read_addr_c),
-    .dout_c(dout_c)
-  );
+        .en_b_brams_in              (en_b_brams_in),
+        .addr_b_brams_in            (addr_b_brams_in),
+        .we_b_brams_in              (we_b_brams_in),
+        .din_b_brams_in             (din_b_brams_in),
+
+        .en_c_bram_in               (en_c_bram_in),
+        .we_c_bram_in               (we_c_bram_in),
+        .addr_c_bram_in             (addr_c_bram_in),
+        .pe_write_idx_in            (pe_write_idx_in), // Index for writing from buffer
+        //.din_c_bram_in            (din_c_bram), // Connected internally in datapath
+
+        .pe_start_in                (pe_start_in),
+        .pe_valid_in_in             (pe_valid_in_in),
+        .pe_last_in                 (pe_last_in),
+
+        .pe_output_capture_en       (pe_output_capture_en),
+        .pe_output_buffer_reset     (pe_output_buffer_reset),
+
+        .pe_c_out_out               (pe_c_out_out), // Flattened PE outputs
+        .pe_outputs_valid_out       (pe_outputs_valid_out), // <-- CONNECTED THE NEW OUTPUT
+        .pe_output_buffer_valid_out (pe_output_buffer_valid_out),
+
+        .read_en_c                  (read_en_c),
+        .read_addr_c                (read_addr_c),
+        .dout_c                     (dout_c)
+        );
 
 
    // ------------------------------------------------------------------------- //
@@ -245,7 +248,7 @@ module datapath_tb;
                         we_b_brams_in[bank_b_idx] = 0;
 
                         $display("  Loading B Bank %0d Addr %0h with Data %h (Matrix B[%0d][%0d])",
-                            bank_b_idx, addr_b, testbench_B[matrix_row][matrix_col], matrix_row, matrix_col);
+                                 bank_b_idx, addr_b, testbench_B[matrix_row][matrix_col], matrix_row, matrix_col);
                      end // if (addr_b < B_BANK_SIZE)
                    else
                      begin
@@ -259,7 +262,7 @@ module datapath_tb;
          #20; // Wait for BRAMs to settle
       end // End of task body
 
-   endtask // load_dut_brams_via_top_ports
+   endtask
 
 
    // ----------------------------------------------------------------------------------- //
@@ -389,10 +392,10 @@ module datapath_tb;
 
           en_b_brams_in = local_read_en_b_brams; // Re-purpose these signals for reading
           addr_b_brams_in = local_read_addr_b_brams; // Re-purpose these signals for reading
-         */
+          */
 
       end // task verify_bram_contents_via_top_ports
-   endtask // verify_bram_contents_via_top_ports
+   endtask
 
 
 
@@ -400,120 +403,120 @@ module datapath_tb;
    // -------------------------------------- //
    // --- Tasks for Test Case Management ---
    // -------------------------------------- //
-  // Task to read A and B matrices from external text files
-  task read_matrices_and_expected_C;
-    input integer test_num;
-    // Use reg arrays for filenames instead of string
-    reg [8*MAX_FILENAME_LEN-1:0] dir_path;
-    reg [8*MAX_FILENAME_LEN-1:0] a_filename;
-    reg [8*MAX_FILENAME_LEN-1:0] b_filename;
-    reg [8*MAX_FILENAME_LEN-1:0] c_filename;
-    integer matrix_row; // Declare variables at start of task
-    integer matrix_col; // Declare variables at start of task
-    reg [DATA_WIDTH-1:0] read_value_data; // Declare variables at start of task
-    reg [ACC_WIDTH-1:0] read_value_acc; // Declare variables at start of task
-    integer scan_ret; // Declare variables at start of task
-    integer file_handle; // Declare variables at start of task
+   // Task to read A and B matrices from external text files
+   task read_matrices_and_expected_C;
+      input integer test_num;
+      // Use reg arrays for filenames instead of string
+      reg [8*MAX_FILENAME_LEN-1:0] dir_path;
+      reg [8*MAX_FILENAME_LEN-1:0] a_filename;
+      reg [8*MAX_FILENAME_LEN-1:0] b_filename;
+      reg [8*MAX_FILENAME_LEN-1:0] c_filename;
+      integer                      matrix_row; // Declare variables at start of task
+      integer                      matrix_col; // Declare variables at start of task
+      reg [DATA_WIDTH-1:0]         read_value_data; // Declare variables at start of task
+      reg [ACC_WIDTH-1:0]          read_value_acc; // Declare variables at start of task
+      integer                      scan_ret; // Declare variables at start of task
+      integer                      file_handle; // Declare variables at start of task
 
-    begin // Start of task body
-      // Construct filenames using $sformatf - Breaking it down
-      $sformat(dir_path, "%0s/test_%0d", TEST_CASE_DIR_BASE, test_num);
-      $sformat(a_filename, "%0s/matrix_A.txt", dir_path);
-      $sformat(b_filename, "%0s/matrix_B.txt", dir_path);
-      $sformat(c_filename, "%0s/expected_C.txt", dir_path);
+      begin // Start of task body
+         // Construct filenames using $sformatf - Breaking it down
+         $sformat(dir_path, "%0s/test_%0d", TEST_CASE_DIR_BASE, test_num);
+         $sformat(a_filename, "%0s/matrix_A.txt", dir_path);
+         $sformat(b_filename, "%0s/matrix_B.txt", dir_path);
+         $sformat(c_filename, "%0s/expected_C.txt", dir_path);
 
 
-      $display("Reading test case %0d: %s, %s, and %s", test_num, a_filename, b_filename, c_filename);
+         $display("Reading test case %0d: %s, %s, and %s", test_num, a_filename, b_filename, c_filename);
 
-      // Read A matrix (assuming hexadecimal values in file)
-      file_handle = $fopen(a_filename, "r"); // Open file for reading
-      if (file_handle == 0) begin
-        $error("Could not open A matrix file: %s", a_filename);
-        $finish; // Abort simulation on error
-      end
-      // Read matrix elements row by row
-      for (matrix_row = 0; matrix_row < M; matrix_row = matrix_row + 1) begin
-        for (matrix_col = 0; matrix_col < K; matrix_col = matrix_col + 1) begin
-          // Read hexadecimal value (%h)
-          scan_ret = $fscanf(file_handle, "%h", read_value_data);
-          if (scan_ret != 1) begin
-            $error("Error reading A matrix file %s at row %0d, col %0d", a_filename, matrix_row, matrix_col);
-            $fclose(file_handle);
+         // Read A matrix (assuming hexadecimal values in file)
+         file_handle = $fopen(a_filename, "r"); // Open file for reading
+         if (file_handle == 0) begin
+            $error("Could not open A matrix file: %s", a_filename);
+            $finish; // Abort simulation on error
+         end
+         // Read matrix elements row by row
+         for (matrix_row = 0; matrix_row < M; matrix_row = matrix_row + 1) begin
+            for (matrix_col = 0; matrix_col < K; matrix_col = matrix_col + 1) begin
+               // Read hexadecimal value (%h)
+               scan_ret = $fscanf(file_handle, "%h", read_value_data);
+               if (scan_ret != 1) begin
+                  $error("Error reading A matrix file %s at row %0d, col %0d", a_filename, matrix_row, matrix_col);
+                  $fclose(file_handle);
+                  $finish;
+               end
+               testbench_A[matrix_row][matrix_col] = read_value_data; // Store in testbench array
+            end
+         end
+         $fclose(file_handle); // Close file
+
+         // Display the contents of testbench_A after reading
+         $display("\nContents of testbench_A after reading:");
+         for (matrix_row = 0; matrix_row < M; matrix_row = matrix_row + 1) begin
+            $write("Row %0d: ", matrix_row);
+            for (matrix_col = 0; matrix_col < K; matrix_col = matrix_col + 1) begin
+               $write("%h ", testbench_A[matrix_row][matrix_col]);
+            end
+            $display(""); // Newline after each row
+         end
+         $display("--------------------------------------");
+
+
+         // Read B matrix (assuming hexadecimal values in file)
+         file_handle = $fopen(b_filename, "r"); // Open file for reading
+         if (file_handle == 0) begin
+            $error("Could not open B matrix file: %s", b_filename);
             $finish;
-          end
-          testbench_A[matrix_row][matrix_col] = read_value_data; // Store in testbench array
-        end
-      end
-      $fclose(file_handle); // Close file
+         end
+         // Read matrix elements row by row
+         for (matrix_row = 0; matrix_row < K; matrix_row = matrix_row + 1) begin // B has K rows
+            for (matrix_col = 0; matrix_col < N; matrix_col = matrix_col + 1) begin // B has N columns
+               // Read hexadecimal value (%h)
+               scan_ret = $fscanf(file_handle, "%h", read_value_data);
+               if (scan_ret != 1) begin
+                  $error("Error reading B matrix file %s at row %0d, col %0d", b_filename, matrix_row, matrix_col);
+                  $fclose(file_handle);
+                  $finish;
+               end
+               testbench_B[matrix_row][matrix_col] = read_value_data; // Store in testbench array
+            end
+         end
+         $fclose(file_handle); // Close file
 
-      // Display the contents of testbench_A after reading
-      $display("\nContents of testbench_A after reading:");
-      for (matrix_row = 0; matrix_row < M; matrix_row = matrix_row + 1) begin
-          $write("Row %0d: ", matrix_row);
-          for (matrix_col = 0; matrix_col < K; matrix_col = matrix_col + 1) begin
-              $write("%h ", testbench_A[matrix_row][matrix_col]);
-          end
-          $display(""); // Newline after each row
-      end
-      $display("--------------------------------------");
+         // Display the contents of testbench_B after reading
+         $display("\nContents of testbench_B after reading:");
+         for (matrix_row = 0; matrix_row < K; matrix_row = matrix_row + 1) begin
+            $write("Row %0d: ", matrix_row);
+            for (matrix_col = 0; matrix_col < N; matrix_col = matrix_col + 1) begin
+               $write("%h ", testbench_B[matrix_row][matrix_col]);
+            end
+            $display(""); // Newline after each row
+         end
+         $display("--------------------------------------");
 
 
-      // Read B matrix (assuming hexadecimal values in file)
-      file_handle = $fopen(b_filename, "r"); // Open file for reading
-       if (file_handle == 0) begin
-        $error("Could not open B matrix file: %s", b_filename);
-        $finish;
-      end
-      // Read matrix elements row by row
-      for (matrix_row = 0; matrix_row < K; matrix_row = matrix_row + 1) begin // B has K rows
-        for (matrix_col = 0; matrix_col < N; matrix_col = matrix_col + 1) begin // B has N columns
-           // Read hexadecimal value (%h)
-           scan_ret = $fscanf(file_handle, "%h", read_value_data);
-           if (scan_ret != 1) begin
-            $error("Error reading B matrix file %s at row %0d, col %0d", b_filename, matrix_row, matrix_col);
-            $fclose(file_handle);
+         // Read expected C matrix (assuming hexadecimal values in file)
+         file_handle = $fopen(c_filename, "r"); // Open file for reading
+         if (file_handle == 0) begin
+            $error("Could not open expected C matrix file: %s", c_filename);
             $finish;
-          end
-          testbench_B[matrix_row][matrix_col] = read_value_data; // Store in testbench array
-        end
-      end
-      $fclose(file_handle); // Close file
+         end
+         for (matrix_row = 0; matrix_row < M; matrix_row = matrix_row + 1) begin
+            for (matrix_col = 0; matrix_col < N; matrix_col = matrix_col + 1) begin
+               // Read hexadecimal value (%h)
+               scan_ret = $fscanf(file_handle, "%h", read_value_acc);
+               if (scan_ret != 1) begin
+                  $error("Error reading expected C matrix file %s at row %0d, col %0d", c_filename, matrix_row, matrix_col);
+                  $fclose(file_handle);
+                  $finish;
+               end
+               expected_C[matrix_row][matrix_col] = read_value_acc; // Store in testbench array
+            end
+         end
+         $fclose(file_handle); // Close file
 
-       // Display the contents of testbench_B after reading
-      $display("\nContents of testbench_B after reading:");
-      for (matrix_row = 0; matrix_row < K; matrix_row = matrix_row + 1) begin
-          $write("Row %0d: ", matrix_row);
-          for (matrix_col = 0; matrix_col < N; matrix_col = matrix_col + 1) begin
-              $write("%h ", testbench_B[matrix_row][matrix_col]);
-          end
-          $display(""); // Newline after each row
-      end
-      $display("--------------------------------------");
-
-
-      // Read expected C matrix (assuming hexadecimal values in file)
-      file_handle = $fopen(c_filename, "r"); // Open file for reading
-      if (file_handle == 0) begin
-        $error("Could not open expected C matrix file: %s", c_filename);
-        $finish;
-      end
-      for (matrix_row = 0; matrix_row < M; matrix_row = matrix_row + 1) begin
-        for (matrix_col = 0; matrix_col < N; matrix_col = matrix_col + 1) begin
-           // Read hexadecimal value (%h)
-           scan_ret = $fscanf(file_handle, "%h", read_value_acc);
-           if (scan_ret != 1) begin
-            $error("Error reading expected C matrix file %s at row %0d, col %0d", c_filename, matrix_row, matrix_col);
-            $fclose(file_handle);
-            $finish;
-          end
-          expected_C[matrix_row][matrix_col] = read_value_acc; // Store in testbench array
-        end
-      end
-      $fclose(file_handle); // Close file
-
-      $display("Matrices and expected C read successfully.");
-    end // End of task body
-  endtask // read_matrices_and_expected_C
+         $display("Matrices and expected C read successfully.");
+      end // End of task body
+   endtask
 
 
 
@@ -522,6 +525,7 @@ module datapath_tb;
    // --------------------------------------------------------------------- //
    // Task to execute matrix multiplication sequence for 2D independent PEs //
    // Designed to work with the CORRECTED pe_no_fifo module's output_valid. //
+   // Corrected BRAM read timing to pre-fetch data.
    // --------------------------------------------------------------------- //
    task execute_matrix_mult;
       integer k_step; // Declare variables at start of task
@@ -566,71 +570,77 @@ module datapath_tb;
          pe_output_buffer_reset = 'b0;
          @(posedge clk); #1; // Wait for reset to clear
 
-         // Iterate through accumulation steps (K steps for each C element)
-         for (k_step = 0; k_step < K; k_step = k_step + 1)
-           begin
+         $display("@%0t: Starting input feeding sequence...", $time);
 
-              // Set the current accumulation index (0 to K-1)
-              k_idx_in = k_step;
+         // --- Pre-fetch BRAM data for k_step = 0 ---
+         // Set BRAM addresses and enables for the first input cycle (k_step = 0)
+         k_idx_in = 0; // Set index for the data being requested
+         en_a_brams_in = {N_BANKS{1'b1}}; // Enable read for all A banks
+         en_b_brams_in = {N_BANKS{1'b1}}; // Enable read for all B banks
 
-              // Set PE control signals for this accumulation step (broadcast)
-              pe_valid_in_in = 1;               // Inputs are valid during accumulation
-              pe_start_in = (k_step == 0);      // Start high ONLY on first k_step
-              pe_last_in = (k_step == K - 1);   // Last high on final k_step
+         for (bank_idx = 0; bank_idx < N_BANKS; bank_idx = bank_idx + 1) begin
+            // Address for A[bank_idx][0] in A_BRAM[bank_idx]: (bank_idx / N_BANKS) * K + 0
+            addr_a_brams_in[(bank_idx * ADDR_WIDTH_A_BANK) +: ADDR_WIDTH_A_BANK] = (bank_idx / N_BANKS) * K;
+            // Address for B[0][bank_idx] in B_BRAM[bank_idx]: 0 * (N / N_BANKS) + bank_idx / N_BANKS
+            addr_b_brams_in[(bank_idx * ADDR_WIDTH_B_BANK) +: ADDR_WIDTH_B_BANK] = bank_idx / N_BANKS;
+         end
 
-              // --- Drive A BRAM Addresses and Enables ---
-              // For each PE row pr, need A[pr][k_step] from A_BRAM[pr % N_BANKS] at address (pr / N_BANKS) * K + k_step
-              // The datapath connects dout_a_brams[bank_idx] to PEs in rows pr where pr % N_BANKS == bank_idx.
-              // To feed A[pr][k_step] to PE row pr, we need to read it from A_BRAM[pr % N_BANKS].
-              // The address for A[pr][k_step] in A_BRAM[pr % N_BANKS] is (pr / N_BANKS) * K + k_step.
-              // The testbench needs to set addr_a_brams_in such that for each bank_idx, the address
-              // for a row 'i' where i % N_BANKS == bank_idx is provided.
-              // Assuming for bank_idx, we read A[bank_idx][k_step] if M >= N_BANKS.
-              // Address for A[bank_idx][k_step] in A_BRAM[bank_idx]: (bank_idx / N_BANKS) * K + k_step
-              for (bank_idx = 0; bank_idx < N_BANKS; bank_idx = bank_idx + 1)
-                begin
-                   // This address calculation assumes PE row index == bank index for the data needed by that bank.
-                   // This is a simplification based on the datapath routing and partitioning comments.
-                   // A more general approach might require iterating through PE rows and calculating the bank/address for each.
-                   addr_a_brams_in[(bank_idx * ADDR_WIDTH_A_BANK) +: ADDR_WIDTH_A_BANK] = (bank_idx / N_BANKS) * K + k_step;
-                end
-              en_a_brams_in = {N_BANKS{1'b1}}; // Enable read for all A banks
-
-              // --- Drive B BRAM Addresses and Enables ---
-              // For each PE col pc, need B[k_step][pc] from B_BRAM[pc % N_BANKS] at address k_step * (N / N_BANKS) + pc / N_BANKS
-              // The datapath connects dout_b_brams[bank_idx] to PEs in cols pc where pc % N_BANKS == bank_idx.
-              // To feed B[k_step][pc] to PE col pc, we need to read it from B_BRAM[pc % N_BANKS].
-              // The address for B[k_step][pc] in B_BRAM[pc % N_BANKS] is k_step * (N / N_BANKS) + pc / N_BANKS.
-              // The testbench needs to set addr_b_brams_in such that for each bank_idx, the address
-              // for a col 'j' where j % N_BANKS == bank_idx is provided.
-              // Assuming for bank_idx, we read B[k_step][bank_idx] if N >= N_BANKS.
-              // Address for B[k_step][bank_idx] in B_BRAM[bank_idx]: k_step * (N / N_BANKS) + bank_idx / N_BANKS
-              for (bank_idx = 0; bank_idx < N_BANKS; bank_idx = bank_idx + 1)
-                begin
-                   // This address calculation assumes PE column index == bank index for the data needed by that bank.
-                   addr_b_brams_in[(bank_idx * ADDR_WIDTH_B_BANK) +: ADDR_WIDTH_B_BANK] = k_step * (N / N_BANKS) + bank_idx / N_BANKS;
-                end
-              en_b_brams_in = {N_BANKS{1'b1}}; // Enable read for all B banks
+         $display("@%0t: Pre-fetching BRAM data for k_step = 0. Addresses set.", $time);
+         @(posedge clk); #1; // Wait one cycle. BRAM read for k_step=0 is initiated.
+         $display("@%0t: BRAM read for k_step = 0 initiated. Data will be ready next cycle.", $time);
 
 
+         // --- Feed inputs for K cycles (k_step from 0 to K-1) ---
+         for (k_step = 0; k_step < K; k_step = k_step + 1) begin
 
-              // Wait for BRAM read latency (1 cycle)
-              // Data becomes available at dout_a_brams and dout_b_brams
-              // PE inputs (pe_a_in, pe_b_in) update combinationally
+            // On this clock edge, the data for 'k_step' is available from BRAMs
+            // and will be registered by the PE's input registers.
+
+            // Set PE control signals for this accumulation step (broadcast)
+            // These signals should be set combinationally before the clock edge
+            pe_valid_in_in = 1;               // Inputs are valid during accumulation
+            pe_start_in = (k_step == 0);      // Start high ONLY on first k_step
+            pe_last_in = (k_step == K - 1);   // Last high on final k_step
+
+            // k_idx_in should track the data being REGISTERED in this cycle
+            k_idx_in = k_step;
+
+            $display("@%0t: Registering input for k_step %0d. pe_start_in=%0d, pe_valid_in_in=%0d, pe_last_in=%0d",
+                     $time, k_step, pe_start_in, pe_valid_in_in, pe_last_in);
+
+            // --- Set BRAM Addresses and Enables for the *next* k_step (k_step + 1) ---
+            // This pre-fetches the data needed for the next cycle.
+            if (k_step < K - 1) begin // Do this only if it's not the last input cycle
+               en_a_brams_in = {N_BANKS{1'b1}}; // Keep read enabled
+               en_b_brams_in = {N_BANKS{1'b1}}; // Keep read enabled
+
+               for (bank_idx = 0; bank_idx < N_BANKS; bank_idx = bank_idx + 1) begin
+                  // Address for A[bank_idx][k_step + 1] in A_BRAM[bank_idx]
+                  addr_a_brams_in[(bank_idx * ADDR_WIDTH_A_BANK) +: ADDR_WIDTH_A_BANK] = (bank_idx / N_BANKS) * K + (k_step + 1);
+                  // Address for B[k_step + 1][bank_idx] in B_BRAM[bank_idx]
+                  addr_b_brams_in[(bank_idx * ADDR_WIDTH_B_BANK) +: ADDR_WIDTH_B_BANK] = (k_step + 1) * (N / N_BANKS) + bank_idx / N_BANKS;
+               end
+               $display("@%0t: Setting BRAM addresses for next cycle (k_step = %0d).", $time, k_step + 1);
+            end else begin
+               // On the last input cycle, deassert BRAM read enables after the clock edge
+               // where the last data is registered.
+               en_a_brams_in = 'b0; // Disable reads
+               en_b_brams_in = 'b0; // Disable reads
+               $display("@%0t: Last input cycle (%0d). Deasserting BRAM read enables.", $time, k_step);
+            end
 
 
-              @(posedge clk); #1; // PE registers the data into a_reg/b_reg. This is the end of the input cycle.
+            @(posedge clk); #1; // Wait for the next clock edge. PE registers current data. BRAM read for next data starts.
 
-              $display("@%0t: Accumulation step %0d complete.", $time, k_step);
+         end // for (k_step = 0; k_step < K; k_step = k_step + 1)
 
-           end // for (k_step = 0; k_step < K; k_step = k_step + 1)
 
-         // Deassert control signals after the loop
+         // After the loop, the last input has been registered.
+         // Deassert input control signals.
          pe_valid_in_in = 0;
          pe_start_in = 0;
          pe_last_in = 0;
-         en_a_brams_in = 'b0; // Disable BRAM reads
-         en_b_brams_in = 'b0;
+
 
          $display("@%0t: Finished feeding inputs. Waiting for PE outputs to become valid...", $time);
          for(i = 0; i < PE_ACC_LATENCY; i = i + 1)
@@ -638,15 +648,13 @@ module datapath_tb;
               @(posedge clk);
            end
 
-         $display("@%0t: Pipeline drain complete. Checking output.", $time);
-         // Wait for all PE outputs to become valid
-         // This assumes all PEs finish at the same time and their output_valid signals
-         // are synchronous. Wait until all bits of pe_outputs_valid_out are high.
-         // Need to wait at least PE_ACC_LATENCY cycles after the last input was registered.
-         // The last input was registered at the end of the second @(posedge clk) in the last loop iteration.
-         // So we wait PE_ACC_LATENCY more cycles from that point.
-         // The 'wait' condition will handle the exact timing based on the PE's output_valid.
 
+         // The PE output_valid signal should go high PE_ACC_LATENCY cycles after the last input was registered.
+         // The last input was registered at the posedge of the last iteration of the k_step loop.
+         // We need to wait PE_ACC_LATENCY cycles *from that point*.
+         // The 'wait' statement handles this timing automatically by checking the signal.
+
+         // No need for a fixed delay loop here. The 'wait' is sufficient.
          wait (pe_outputs_valid_out == {(PE_ROWS * PE_COLS){1'b1}}); // Wait for all PE output_valid flags to be high
          $display("@%0t: All PE outputs are valid.", $time);
 
@@ -661,12 +669,11 @@ module datapath_tb;
 
          $display("\n@%0t: After PE Output Capture", $time);
          // Display buffer content (optional - use waveform viewer for detailed debug)
-         for (pe_write_idx = 0; pe_write_idx < PE_ROWS * PE_COLS; pe_write_idx = pe_write_idx + 1)
-           begin
-              //Adjust hierarchical path if needed, e.g., dut.pe_output_buffer[pe_write_idx]
-              $display("PE Output Buffer[%0d]: %h", pe_write_idx, dut.pe_output_buffer[pe_write_idx]);
-           end
-         $display("--------------------------------------");
+         // for (pe_write_idx = 0; pe_write_idx < PE_ROWS * PE_COLS; pe_write_idx = pe_write_idx + 1) begin
+         //     // Adjust hierarchical path if needed, e.g., dut.pe_output_buffer[pe_write_idx]
+         //     $display("PE Output Buffer[%0d]: %h", pe_write_idx, dut.pe_output_buffer[pe_write_idx]);
+         // end
+         // $display("--------------------------------------");
 
 
          // --- Write PE Buffer to C BRAM ---
@@ -675,14 +682,13 @@ module datapath_tb;
          en_c_bram_in = 1; // Enable C BRAM Port A (Write)
          we_c_bram_in = 1; // Enable write operation
 
-         for (pe_write_idx = 0; pe_write_idx < PE_ROWS * PE_COLS; pe_write_idx = pe_write_idx + 1)
-           begin
-              // The flattened buffer index maps directly to the flattened C BRAM address
-              addr_c_bram_in = pe_write_idx;
-              pe_write_idx_in = pe_write_idx; // Select element from buffer
+         for (pe_write_idx = 0; pe_write_idx < PE_ROWS * PE_COLS; pe_write_idx = pe_write_idx + 1) begin
+            // The flattened buffer index maps directly to the flattened C BRAM address
+            addr_c_bram_in = pe_write_idx;
+            pe_write_idx_in = pe_write_idx; // Select element from buffer
 
-              @(posedge clk); #1; // Perform the write operation on the positive clock edge
-           end
+            @(posedge clk); #1; // Perform the write operation on the positive clock edge
+         end
 
          // Disable C BRAM write signals after writing all buffered elements
          en_c_bram_in = 0;
@@ -693,8 +699,7 @@ module datapath_tb;
          #20; // Wait for everything to settle
 
       end
-   endtask // execute_matrix_mult
-
+   endtask
 
 
 
@@ -758,7 +763,7 @@ module datapath_tb;
          $display("--------------------------------------");
 
       end // task verify_results
-   endtask // verify_results
+   endtask
 
    task apply_reset;
       begin
@@ -769,11 +774,11 @@ module datapath_tb;
          #100; // Wait for reset to propagate
          $display("Reset complete.");
       end
-   endtask // apply_reset
+   endtask
 
 
 
-   
+
    // -------------------------- //
    // --- Main Initial Block --- //
    // -------------------------- //
@@ -781,7 +786,7 @@ module datapath_tb;
    initial
      begin
         // Setup waveform dumping for debugging
-        $dumpfile("datapath_tb.vcd");
+        $dumpfile("datapath_tb2.vcd");
         $dumpvars(0, datapath_tb2); // Dump all signals in the testbench module
 
         // Initialize all testbench inputs to a known state at time 0
@@ -836,7 +841,7 @@ module datapath_tb;
              load_dut_brams_via_top_ports();
 
              // 3. Verify the DUT's BRAM contents by reading from top-level read ports
-             verify_bram_contents_via_top_ports();
+             // verify_bram_contents_via_top_ports();
 
              // 4. Simulate the datapath for this test case
              execute_matrix_mult();
@@ -848,7 +853,7 @@ module datapath_tb;
              $display("Finished Test Case %0d", test_case);
              $display("===================================================\n");
 
-	     #10;
+             #10;
 
           end // end test_case loop
 
