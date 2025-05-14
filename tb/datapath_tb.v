@@ -8,7 +8,7 @@ module datapath_tb;
 
 
    // Parameters - Must match the datapath module instantiation
-   parameter DATA_WIDTH = 4; // Data width of matrix elements A and B
+   parameter DATA_WIDTH = 16; // Data width of matrix elements A and B
    parameter M = 3;           // Number of rows in Matrix A and C
    parameter K = 3;           // Number of columns in Matrix A and rows in Matrix B
    parameter N = 3;           // Number of columns in Matrix B and C
@@ -109,7 +109,7 @@ module datapath_tb;
    always #5 clk = ~clk; // 10ns clock period (adjust as needed)
 
    // Instantiate the Datapath module - Connect testbench signals to datapath ports
-   datapath2
+   datapath
      #(
        .DATA_WIDTH (DATA_WIDTH),
        .M          (M),
@@ -786,8 +786,8 @@ module datapath_tb;
    initial
      begin
         // Setup waveform dumping for debugging
-        $dumpfile("datapath_tb2.vcd");
-        $dumpvars(0, datapath_tb2); // Dump all signals in the testbench module
+        $dumpfile("datapath_tb.vcd");
+        $dumpvars(0, datapath_tb); // Dump all signals in the testbench module
 
         // Initialize all testbench inputs to a known state at time 0
         clk = 0;
@@ -841,7 +841,7 @@ module datapath_tb;
              load_dut_brams_via_top_ports();
 
              // 3. Verify the DUT's BRAM contents by reading from top-level read ports
-             // verify_bram_contents_via_top_ports();
+             verify_bram_contents_via_top_ports();
 
              // 4. Simulate the datapath for this test case
              execute_matrix_mult();

@@ -114,7 +114,7 @@ module top
 
 
    // Instantiate the Datapath module
-   datapath2
+   datapath
      #(
        .DATA_WIDTH (DATA_WIDTH),
        .M          (M),
@@ -205,4 +205,4 @@ module top
                     .mult_done                       (mult_done) // Connects directly to top-level output
                     );
 
-endmodule : top
+endmodule

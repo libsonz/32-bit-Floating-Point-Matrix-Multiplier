@@ -9,10 +9,10 @@ module top_tb;
 
    // Parameters - Must match the top-level module instantiation
    parameter DATA_WIDTH = 16; // Data width of matrix elements A and B
-   parameter M = 3;           // Number of rows in Matrix A and C
-   parameter K = 3;           // Number of columns in Matrix A and rows in Matrix B
-   parameter N = 3;           // Number of columns in Matrix B and C
-   parameter N_BANKS = 3;     // Number of BRAM banks for Matrix A and B
+   parameter M = 4;           // Number of rows in Matrix A and C
+   parameter K = 4;           // Number of columns in Matrix A and rows in Matrix B
+   parameter N = 4;           // Number of columns in Matrix B and C
+   parameter N_BANKS = 4;     // Number of BRAM banks for Matrix A and B
 
    // Parameters for the 2D PE Array dimensions (Must match top-level module)
    parameter PE_ROWS = M;     // Number of PE rows = M
@@ -629,7 +629,7 @@ module top_tb;
            // This task drives the top-level Port A inputs.
            load_dut_brams();
 
-           // verify_loaded_brams();
+           verify_loaded_brams();
 
            // 3. Run the multiplication sequence via the controller
            // Asserting start_mult makes the controller drive the Port A inputs.
@@ -669,4 +669,4 @@ module top_tb;
 
      end // initial begin
 
-endmodule : top_tb
+endmodule 
