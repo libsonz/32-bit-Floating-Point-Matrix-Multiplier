@@ -33,7 +33,6 @@ wire is_zero_a = ((i_a[30:0] == 0)); //sign bit doesnt contribute anything
 wire is_zero_b = ((i_b[30:0] == 0));
 
 // Compute result sign (XOR of inout signs)
-wire sign_res;
 assign sign_res = sign_a ^ sign_b;
 
 // Core multiplication and normalization
