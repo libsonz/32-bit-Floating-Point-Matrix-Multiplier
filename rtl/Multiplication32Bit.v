@@ -8,7 +8,13 @@ module Multiplication32bit(
     output overflow
 );
 
-wire [47:0] product = man_a * man_b; // Multiply mantissas max (24x24 = 48 bits)
+wire [47:0] product;
+
+    multiplier_carrysave #(.N(24)) csm (
+    .a(man_a),
+    .b(man_b),
+    .p(product)
+); // Multiply mantissas max (24x24 = 48 bits)
 
 // Normalization
 wire norm_shift = product[47]; //checking if number is normal or denormal
