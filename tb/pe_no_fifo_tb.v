@@ -1,16 +1,31 @@
 `timescale 1ns/1ps
+
 module pe_no_fifo_tb;
 
-    reg clk, rst_n;
-    reg start, valid_in, last;
-    reg [31:0] a, b;
-    wire [31:0] c;
+    parameter DATA_WIDTH = 32;
+    parameter N = 16; // Number of input pairs per testcase
+    parameter NUM_TESTCASE = 10;
+
+    reg clk;
+    reg clr_n;
+    reg start;
+    reg valid_in;
+    reg last;
+    reg [DATA_WIDTH-1:0] a, b;
+    wire [DATA_WIDTH-1:0] c;
     wire output_valid;
 
-    // Instantiate DUT
-    pe_no_fifo dut (
+    // Store input values for result verification
+    reg [DATA_WIDTH-1:0] input_a [0:N-1];
+    reg [DATA_WIDTH-1:0] input_b [0:N-1];
+
+    reg [DATA_WIDTH-1:0] expected_result;
+    integer i, pass, fail;
+
+    // Instantiate PE
+    pe_no_fifo uut(
         .clk(clk),
-        .rst_n(rst_n),
+        .clr_n(clr_n),
         .start(start),
         .valid_in(valid_in),
         .last(last),
@@ -20,83 +35,91 @@ module pe_no_fifo_tb;
         .output_valid(output_valid)
     );
 
-    // Clock generation
+    // 100MHz clock
     always #5 clk = ~clk;
 
-    integer test_num;
-
-    initial begin
-        $display("Time\t\tTest\tResult(hex)\t\tOutput_Valid");
-        clk = 0; rst_n = 0;
-        start = 0; valid_in = 0; last = 0; a = 0; b = 0;
-        #10 rst_n = 1;
-
-        // Test 1: 3.5*2.0 + 1.5*4.0 = 7.0 + 6.0 = 13.0 (0x41500000)
-        test_num = 1;
-        @(posedge clk);
-        start = 1; valid_in = 1; last = 0;
-        a = 32'h40600000; b = 32'h40000000; // 3.5  * 2.0
-        @(posedge clk);
-        start = 0; valid_in = 1; last = 1;
-        a = 32'h3FC00000; b = 32'h40800000; // 1.5  * 4.0
-        @(posedge clk);
-        valid_in = 0; last = 0;
-        // Wait for pipeline to drain (3 cycles)
-        repeat(3) @(posedge clk);
-        $display("%0t\tTest %0d\t%h\t\t%b", $time, test_num, c, output_valid);
-
-        // Test 2: -1.5*4.0 + 2.0*-3.5 = -6.0 + -7.0 = -13.0 (0xC1500000)
-        test_num = 2;
-        @(posedge clk);
-        start = 1; valid_in = 1; last = 0;
-        a = 32'hBFC00000; b = 32'h40800000; // -1.5 * 4.0
-        @(posedge clk);
-        start = 0; valid_in = 1; last = 1;
-        a = 32'h40000000; b = 32'hC0600000; // 2.0  * -3.5
-        @(posedge clk);
-        valid_in = 0; last = 0;
-        repeat(3) @(posedge clk);
-        $display("%0t\tTest %0d\t%h\t\t%b", $time, test_num, c, output_valid);
-
-        // Test 3: 0*5.0 + 2.0*0 = 0.0 + 0.0 = 0.0 (0x00000000)
-        test_num = 3;
-        @(posedge clk);
-        start = 1; valid_in = 1; last = 0;
-        a = 32'h00000000; b = 32'h40A00000; // 0 * 5.0
-        @(posedge clk);
-        start = 0; valid_in = 1; last = 1;
-        a = 32'h40000000; b = 32'h00000000; // 2.0 * 0
-        @(posedge clk);
-        valid_in = 0; last = 0;
-        repeat(3) @(posedge clk);
-        $display("%0t\tTest %0d\t%h\t\t%b", $time, test_num, c, output_valid);
-
-        // Test 4: INF*2.0 + 0*1.0 = INF + 0 = INF (0x7F800000)
-        test_num = 4;
-        @(posedge clk);
-        start = 1; valid_in = 1; last = 0;
-        a = 32'h7F800000; b = 32'h40000000; // INF * 2.0
-        @(posedge clk);
-        start = 0; valid_in = 1; last = 1;
-        a = 32'h00000000; b = 32'h3F800000; // 0 * 1.0
-        @(posedge clk);
-        valid_in = 0; last = 0;
-        repeat(3) @(posedge clk);
-        $display("%0t\tTest %0d\t%h\t\t%b", $time, test_num, c, output_valid);
-
-        // Test 5: NaN*1.0 + 1.0*NaN = NaN + NaN = NaN (0x7FC00000 or similar)
-        test_num = 5;
-        @(posedge clk);
-        start = 1; valid_in = 1; last = 0;
-        a = 32'h7FC00000; b = 32'h3F800000; // NaN * 1.0
-        @(posedge clk);
-        start = 0; valid_in = 1; last = 1;
-        a = 32'h3F800000; b = 32'h7FC00000; // 1.0 * NaN
-        @(posedge clk);
-        valid_in = 0; last = 0;
-        repeat(3) @(posedge clk);
-        $display("%0t\tTest %0d\t%h\t\t%b", $time, test_num, c, output_valid);
-
-        #20 $finish;
+    // Reset task
+    task apply_reset;
+    begin
+        clr_n = 0;
+        @(posedge clk); #1;
+        clr_n = 1;
+        @(posedge clk); #1;
     end
+    endtask
+
+    // Compute expected result (must have at least 1 input in function)
+    function [DATA_WIDTH-1:0] calc_expected(input dummy);
+        integer j;
+        begin
+            calc_expected = 0;
+            for (j = 0; j < N; j = j + 1)
+                calc_expected = calc_expected + input_a[j] * input_b[j];
+        end
+    endfunction
+
+    // Send N pairs of data into PE
+    task send_inputs;
+        integer k;
+        begin
+            for (k = 0; k < N; k = k + 1) begin
+                a = $urandom;
+                b = $urandom;
+                input_a[k] = a;
+                input_b[k] = b;
+                valid_in = 1;
+                start = (k == 0);
+                last = (k == N-1);
+
+                @(posedge clk); #1;
+
+                valid_in = 0;
+                start = 0;
+                last = 0;
+                @(posedge clk); #1; // Allow PE to transfer data through pipeline stages
+            end
+        end
+    endtask
+
+    // Wait for output_valid to be asserted
+    task wait_for_output;
+        begin
+            while (!output_valid) @(posedge clk);
+            #1;
+        end
+    endtask
+
+    // Check output result
+    task check_output;
+        begin
+            expected_result = calc_expected(0); // Dummy input required
+            if (output_valid && c === expected_result) begin
+                $display("PASS: Output = %h, Expected = %h", c, expected_result);
+                pass = pass + 1;
+            end else begin
+                $display("FAIL: Output = %h, Expected = %h", c, expected_result);
+                fail = fail + 1;
+            end
+        end
+    endtask
+
+    // Main stimulus
+    initial begin
+        clk = 0; clr_n = 1; start = 0; valid_in = 0; last = 0; a = 0; b = 0;
+        pass = 0; fail = 0;
+
+        apply_reset();
+
+        for (i = 0; i < NUM_TESTCASE; i = i + 1) begin
+            $display("===== Testcase %0d =====", i);
+            send_inputs();
+            wait_for_output();
+            check_output();
+            #10;
+        end
+
+        $display("Test completed. PASS: %0d, FAIL: %0d", pass, fail);
+        $finish;
+    end
+
 endmodule
