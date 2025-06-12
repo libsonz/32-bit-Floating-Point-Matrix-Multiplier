@@ -1,13 +1,14 @@
 `timescale 1ns / 1ps
 
 module adder_32bit(
+    input clk,
+    input rst,
     input [31:0] i_a,
     input [31:0] i_b,
     input i_vld,
     output reg [31:0] o_res,
     output reg o_res_vld,
-    output reg overflow
-);
+    output reg overflow );
 
 wire [7:0] shift;
 wire [23:0] al_man_a, al_man_b;
@@ -59,7 +60,8 @@ Normalization32Bit u_Normalization32Bit (
     .overflow(operation_overflow)               //wire out
 );
 
-always @* begin
+always @(posedge clk or posedge rst) begin
+    if (rst) begin
         o_res_vld <= 1'b0;
         o_res <= 32'b0;
         overflow <=0;
