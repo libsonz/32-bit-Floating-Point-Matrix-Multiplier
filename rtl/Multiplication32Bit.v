@@ -23,7 +23,7 @@ wire guard_bit = norm_shift ? product[23] : product[22]; //guard bit is the one 
 wire sticky_bit = norm_shift ? |product[22:0] : |product[21:0]; //checking if there is a 1 present after guard bit
 wire round = guard_bit & sticky_bit; //round = 1 if guard bit is 1 and sticky bit is 1
 
-// Add rounding (could overflow mantissa → handled later)
+// Add rounding (could overflow mantissa ? handled later)
 wire [23:0] rounded = {1'b0, man_norm} + round; //24 bit wire to account for overflow
 wire carry = rounded[23]; // For overflow detection after rounding
 assign final_mantissa = carry ? rounded[23:1] : rounded[22:0]; //final 23 bits of the mantissa
