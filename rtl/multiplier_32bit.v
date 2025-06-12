@@ -1,6 +1,8 @@
 `timescale 1ns / 1ps
 
 module multiplier_32bit (
+    input clk,
+    input rst,
     input [31:0] i_a,
     input [31:0] i_b,
     input i_vld,
@@ -43,7 +45,8 @@ Multiplication32bit u_Multiplication32bit (
     .final_exp(final_exp),
     .overflow(result_overflow) );
 
-always @* begin
+always @(posedge clk or posedge rst) begin
+    if (rst) begin
         o_res_vld <= 1'b0;
         o_res <= 32'b0;
         overflow <=0;
@@ -59,7 +62,7 @@ always @* begin
             o_res <= {sign_res, 31'b0}; // Zero
             overflow <= 1'b0;
         end else if (result_overflow) begin
-            o_res <= {sign_res, 8'hFF, 23'b0}; // Overflow → Inf
+            o_res <= {sign_res, 8'hFF, 23'b0}; // Overflow ? Inf
             overflow <= 1'b1;
         end else begin
             o_res <= {sign_res, final_exp, final_mantissa};
