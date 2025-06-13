@@ -2,30 +2,20 @@
 
 module multiplier_tb();
 
-    reg clk, rst;
     reg [31:0] i_a, i_b;
-    reg i_vld;
     wire [31:0] o_res;
-    wire o_res_vld;
-    wire overflow;
+    wire        overflow;
 
     reg [31:0] expected_res;
     integer pass_count = 0, fail_count = 0, test_count = 0;
 
     // Instantiate DUT
     multiplier_32bit dut (
-        .clk(clk),
-        .rst(rst),
         .i_a(i_a),
         .i_b(i_b),
-        .i_vld(i_vld),
         .o_res(o_res),
-        .o_res_vld(o_res_vld),
         .overflow(overflow)
     );
-
-    // Clock generation
-    always #5 clk = ~clk;
 
     // Task to run a single test
     task automatic run_test;
@@ -33,18 +23,11 @@ module multiplier_tb();
         input [31:0] b_val;
         input [31:0] expect_val;
         begin
-            @(negedge clk);
             i_a = a_val;
             i_b = b_val;
-            i_vld = 1'b1;
             expected_res = expect_val;
 
-            @(negedge clk);
-            i_vld = 1'b0;
-
-            // Wait for output valid
-            wait (o_res_vld === 1'b1);
-            @(posedge clk); // sample at valid
+            #1; // Chờ 1 đơn vị thời gian cho mạch tổ hợp settle
 
             test_count = test_count + 1;
             $display("Test %0d: 0x%08h * 0x%08h", test_count, a_val, b_val);
@@ -63,9 +46,9 @@ module multiplier_tb();
 
     // Main test sequence
     initial begin
-        $display("Time\t\tA\t\t\tB\t\t\tResult\t\t\tOverflow");
-        clk = 0; rst = 1; i_vld = 0; i_a = 0; i_b = 0;
-        #10 rst = 0;
+        $display("A\t\t\tB\t\t\tResult\t\t\tOverflow");
+
+        i_a = 0; i_b = 0;
 
         // 2.0 * 3.0 = 6.0
         run_test(32'h40000000, 32'h40400000, 32'h40c00000);
@@ -97,27 +80,17 @@ module multiplier_tb();
         // 0.000000001 * -10.88888888 = -1.08888895e-8
         run_test(32'h2f5c28f5, 32'hc120e147, 32'hb10a5b56);
 
-        // ==== H?t các test case ====
-
         $display("\nTestbench Complete.");
         $display("Tests Run: %0d", test_count);
         $display("Passed:    %0d", pass_count);
         $display("Failed:    %0d", fail_count);
-        #20 $finish;
+        #10 $finish;
     end
 
     // Optional: waveform dump for GTKWave
     initial begin
         $dumpfile("multiplier_tb.vcd");
         $dumpvars(0, multiplier_tb);
-    end
-
-    // Optionally: always display when valid output (debug)
-    always @(posedge clk) begin
-        if (o_res_vld) begin
-            $display("%0t\t0x%08h\t0x%08h\t0x%08h\t%b",
-                $time, i_a, i_b, o_res, overflow);
-        end
     end
 
 endmodule
